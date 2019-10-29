@@ -10,10 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 import static com.mongodb.client.model.Projections.excludeId;
 import static com.mongodb.client.model.Projections.fields;
@@ -23,14 +20,17 @@ import static com.mongodb.client.model.Projections.include;
 public class MovieDao extends AbstractMFlixDao {
 
     public static String MOVIES_COLLECTION = "movies";
+    public static String COMMENTS_COLLECTION = "comments";
 
     private MongoCollection<Document> moviesCollection;
+    private MongoCollection<Document> commentsCollection;
 
     @Autowired
     public MovieDao(
             MongoClient mongoClient, @Value("${spring.mongodb.database}") String databaseName) {
         super(mongoClient, databaseName);
         moviesCollection = db.getCollection(MOVIES_COLLECTION);
+        commentsCollection = db.getCollection(COMMENTS_COLLECTION);
     }
 
     @SuppressWarnings("unchecked")
@@ -69,8 +69,10 @@ public class MovieDao extends AbstractMFlixDao {
         // match stage to find movie
         Bson match = Aggregates.match(Filters.eq("_id", new ObjectId(movieId)));
         pipeline.add(match);
+        Bson look = Aggregates.lookup(COMMENTS_COLLECTION, "movie_id", "_id", "comments");
         // TODO> Ticket: Get Comments - implement the lookup stage that allows the comments to
         // retrieved with Movies.
+        pipeline.add(look);
         Document movie = moviesCollection.aggregate(pipeline).first();
 
         return movie;
@@ -206,7 +208,7 @@ public class MovieDao extends AbstractMFlixDao {
         List<Document> movies = new ArrayList<>();
         // TODO > Ticket: Paging - implement the necessary cursor methods to support simple
         // pagination like skip and limit in the code below
-        moviesCollection.find(castFilter).sort(sort).iterator()
+        moviesCollection.find(castFilter).sort(sort).skip(skip).limit(limit).iterator()
                 .forEachRemaining(movies::add);
         return movies;
     }
@@ -288,6 +290,10 @@ public class MovieDao extends AbstractMFlixDao {
         // Your job is to order the stages correctly in the pipeline.
         // Starting with the `matchStage` add the remaining stages.
         pipeline.add(matchStage);
+        pipeline.add(sortStage);
+        pipeline.add(skipStage);
+        pipeline.add(limitStage);
+        pipeline.add(facetStage);
 
         moviesCollection.aggregate(pipeline).iterator().forEachRemaining(movies::add);
         return movies;
